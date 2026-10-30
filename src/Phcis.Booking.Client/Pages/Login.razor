@@ -1,0 +1,68 @@
+@page "/login"
+@inject IAccountApi Account
+@inject NavigationManager Navigation
+@inject IWebAssemblyHostEnvironment Environment
+
+<PageTitle>Sign in | PHCIS Booking</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="px-0">
+    <MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Sign in</MudText>
+
+    <MudPaper Outlined="true" Class="pa-6">
+        <EditForm Model="_model" OnValidSubmit="SubmitAsync">
+            <FluentValidator TModel="LoginRequest" />
+            <MudTextField @bind-Value="_model.Email" For="() => _model.Email" Label="Email"
+                          InputType="InputType.Email" autocomplete="username" />
+            <MudTextField @bind-Value="_model.Password" For="() => _model.Password" Label="Password"
+                          InputType="InputType.Password" autocomplete="current-password" Class="mt-2" />
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-4">@_error</MudAlert>
+            }
+
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                       FullWidth="true" Size="Size.Large" Class="mt-6" Disabled="_busy">
+                Sign in
+            </MudButton>
+        </EditForm>
+
+        <MudText Class="mt-4">New here? <MudLink Href="@RegisterHref">Create an account</MudLink></MudText>
+    </MudPaper>
+
+    @if (Environment.IsDevelopment())
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4">
+            Demo accounts (password <code>Clinic2026</code>):<br />
+            patient@phcis.local<br />
+            reception.northside@phcis.local
+        </MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private readonly LoginRequest _model = new();
+    private string? _error;
+    private bool _busy;
+
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private string RegisterHref => ReturnUrl is null ? "register" : $"register?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+        var result = await Account.LoginAsync(_model);
+        _busy = false;
+
+        if (!result.Succeeded)
+        {
+            _error = result.Error!.Message;
+            return;
+        }
+
+        var home = result.Value.Roles.Contains(Roles.Staff) ? "staff" : "appointments";
+        Navigation.NavigateTo(SafeReturnUrl.Resolve(ReturnUrl, home));
+    }
+}

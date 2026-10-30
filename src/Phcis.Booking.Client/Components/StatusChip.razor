@@ -1,0 +1,19 @@
+<MudChip T="string" Size="Size.Small" Color="@Colour" Variant="Variant.Text">@Label</MudChip>
+
+@code {
+    [Parameter, EditorRequired] public AppointmentStatus Status { get; set; }
+
+    private Color Colour => Status switch
+    {
+        AppointmentStatus.Booked => Color.Primary,
+        AppointmentStatus.Attended => Color.Success,
+        AppointmentStatus.NoShow => Color.Warning,
+        _ => Color.Default
+    };
+
+    private string Label => Status switch
+    {
+        AppointmentStatus.NoShow => "No-show",
+        _ => Status.ToString()
+    };
+}

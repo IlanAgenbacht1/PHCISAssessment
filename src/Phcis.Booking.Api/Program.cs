@@ -110,7 +110,15 @@ else
 }
 
 app.UseSerilogRequestLogging();
-app.UseBlazorFrameworkFiles();
+
+// Serves the WASM client (framework files included, pre-compressed and fingerprinted). The old
+// UseBlazorFrameworkFiles middleware conflicts with this, so the environment header it used to
+// add is set by hand: the client reads it to know it's in Development.
+app.Use((context, next) =>
+{
+    context.Response.Headers["Blazor-Environment"] = app.Environment.EnvironmentName;
+    return next(context);
+});
 app.MapStaticAssets();
 
 app.UseRateLimiter();

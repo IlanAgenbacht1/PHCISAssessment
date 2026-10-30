@@ -1,0 +1,124 @@
+@page "/staff"
+@attribute [Authorize(Roles = Roles.Staff)]
+@inject IStaffApi Api
+@inject ISnackbar Snackbar
+@inject TimeProvider Time
+
+<PageTitle>Day list | PHCIS Booking</PageTitle>
+
+<div class="d-flex justify-space-between align-center flex-wrap gap-4 mb-4">
+    <div>
+        <MudText Typo="Typo.h4" HtmlTag="h1">Day list</MudText>
+        <MudText Color="Color.Secondary">@_dayList?.ClinicName</MudText>
+    </div>
+    <div class="d-flex align-center gap-2">
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" aria-label="Previous day" OnClick="() => MoveDayAsync(-1)" />
+        <MudDatePicker Date="SelectedDate" DateChanged="OnDatePicked" DateFormat="ddd d MMM yyyy" Style="max-width: 180px" />
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" aria-label="Next day" OnClick="() => MoveDayAsync(1)" />
+    </div>
+</div>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_dayList is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <MudText Class="mb-2">
+        <strong>@_dayList.BookedSlots</strong> of @_dayList.TotalSlots slots booked
+        @if (_dayList.TotalSlots == 0)
+        {
+            <span>. No slots open on this day. <MudLink Href="staff/slots">Open up slots</MudLink></span>
+        }
+    </MudText>
+
+    <MudTable Items="_dayList.Appointments" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Outlined="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Time</MudTh>
+            <MudTh>Patient</MudTh>
+            <MudTh>Phone</MudTh>
+            <MudTh>Reason</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Time"><strong>@context.Start.Time()</strong></MudTd>
+            <MudTd DataLabel="Patient">
+                @context.PatientName
+                <MudText Typo="Typo.caption" Class="d-block">ID @context.MaskedIdentityNumber · @context.Reference</MudText>
+            </MudTd>
+            <MudTd DataLabel="Phone">@context.PhoneNumber</MudTd>
+            <MudTd DataLabel="Reason">@(context.ReasonForVisit ?? "-")</MudTd>
+            <MudTd DataLabel="Status"><StatusChip Status="context.Status" /></MudTd>
+            <MudTd>
+                @if (context.CanRecordAttendance)
+                {
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                        <MudButton Color="Color.Success" Disabled="_busyId == context.AppointmentId"
+                                   OnClick="() => RecordAsync(context, attended: true)">Arrived</MudButton>
+                        <MudButton Color="Color.Warning" Disabled="_busyId == context.AppointmentId"
+                                   OnClick="() => RecordAsync(context, attended: false)">No-show</MudButton>
+                    </MudButtonGroup>
+                }
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No appointments on this day.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+}
+
+@code {
+    private DateOnly _date;
+    private DayListDto? _dayList;
+    private string? _error;
+    private int? _busyId;
+
+    private DateTime? SelectedDate => _date.ToDateTime(TimeOnly.MinValue);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _date = DateOnly.FromDateTime(Time.GetLocalNow().DateTime);
+        await LoadAsync();
+    }
+
+    private async Task OnDatePicked(DateTime? value)
+    {
+        if (value is null) return;
+        _date = DateOnly.FromDateTime(value.Value);
+        await LoadAsync();
+    }
+
+    private async Task MoveDayAsync(int days)
+    {
+        _date = _date.AddDays(days);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        var result = await Api.GetDayListAsync(_date);
+        if (result.Succeeded) _dayList = result.Value;
+        else _error = result.Error!.Message;
+    }
+
+    private async Task RecordAsync(DayListEntryDto entry, bool attended)
+    {
+        _busyId = entry.AppointmentId;
+        var result = await Api.RecordAttendanceAsync(entry.AppointmentId, attended);
+        _busyId = null;
+
+        if (result.Succeeded)
+            Snackbar.Add($"{entry.PatientName} marked as {(attended ? "arrived" : "no-show")}.", Severity.Success);
+        else
+            Snackbar.Add(result.Error!.Message, Severity.Error);
+
+        // Reload either way. On a conflict (e.g. the patient just cancelled) the row needs to show what really happened.
+        await LoadAsync();
+    }
+}

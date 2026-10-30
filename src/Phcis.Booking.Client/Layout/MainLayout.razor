@@ -1,3 +1,66 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject IAccountApi Account
+@inject NavigationManager Navigation
 
-@Body
+<MudThemeProvider Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider CloseOnEscapeKey="true" />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="() => _drawerOpen = !_drawerOpen" aria-label="Toggle navigation" />
+        <MudText Typo="Typo.h6" Class="ml-2">PHCIS Clinic Booking</MudText>
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudText Typo="Typo.body2" Class="d-none d-sm-flex mr-3">
+                    @context.User.FindFirst(CookieAuthenticationStateProvider.DisplayNameClaim)?.Value
+                </MudText>
+                <MudButton Color="Color.Inherit" OnClick="SignOutAsync">Sign out</MudButton>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Color="Color.Inherit" Href="login">Sign in</MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Variant="DrawerVariant.Responsive" ClipMode="DrawerClipMode.Always" Elevation="1">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent Class="pb-8">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="pt-6">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    // System fonts rather than a web font: one less download for patients on mobile data.
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#00695C",
+            Secondary = "#5C6BC0",
+            AppbarBackground = "#00695C"
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"]
+            }
+        }
+    };
+
+    private async Task SignOutAsync()
+    {
+        await Account.LogoutAsync();
+        Navigation.NavigateTo("");
+    }
+}

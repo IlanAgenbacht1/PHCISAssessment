@@ -1,0 +1,143 @@
+@page "/register"
+@using Phcis.Booking.Shared.Validation
+@inject IAccountApi Account
+@inject NavigationManager Navigation
+@inject TimeProvider Time
+
+<PageTitle>Create account | PHCIS Booking</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="px-0">
+    <MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Create an account</MudText>
+
+    <MudPaper Outlined="true" Class="pa-6">
+        <EditForm EditContext="_editContext" OnValidSubmit="SubmitAsync">
+            <FluentValidator TModel="RegisterPatientRequest" @ref="_validator" />
+
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.FirstName" For="() => _model.FirstName" Label="First name" autocomplete="given-name" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.LastName" For="() => _model.LastName" Label="Surname" autocomplete="family-name" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudRadioGroup T="IdentityDocumentType" @bind-Value="_model.IdentityType" @bind-Value:after="OnIdentityChanged">
+                        <MudRadio Value="IdentityDocumentType.SaIdNumber" Color="Color.Primary">SA ID number</MudRadio>
+                        <MudRadio Value="IdentityDocumentType.Passport" Color="Color.Primary">Passport</MudRadio>
+                    </MudRadioGroup>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.IdentityNumber" @bind-Value:after="OnIdentityChanged"
+                                  For="() => _model.IdentityNumber" Immediate="true"
+                                  Label="@(_model.IdentityType == IdentityDocumentType.SaIdNumber ? "ID number" : "Passport number")"
+                                  InputMode="@(_model.IdentityType == IdentityDocumentType.SaIdNumber ? InputMode.numeric : InputMode.text)"
+                                  MaxLength="20" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker Label="Date of birth" Date="DateOfBirth" DateChanged="OnDateOfBirthPicked"
+                                   OpenTo="OpenTo.Year" MaxDate="DateTime.Today" DateFormat="yyyy-MM-dd" />
+                    @if (_dobFromId)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Filled in from your ID number</MudText>
+                    }
+                    <ValidationMessage For="() => _model.DateOfBirth" class="mud-input-helper-text mud-input-error" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.PhoneNumber" For="() => _model.PhoneNumber" Label="Cellphone"
+                                  InputType="InputType.Telephone" autocomplete="tel" HelperText="For appointment SMSes" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_model.Email" For="() => _model.Email" Label="Email"
+                                  InputType="InputType.Email" autocomplete="email" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_model.Password" For="() => _model.Password" Label="Password"
+                                  InputType="@(_showPassword ? InputType.Text : InputType.Password)" autocomplete="new-password"
+                                  HelperText="At least 8 characters, with upper and lower case letters and a digit"
+                                  Adornment="Adornment.End" AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  AdornmentAriaLabel="Show password" OnAdornmentClick="() => _showPassword = !_showPassword" />
+                </MudItem>
+            </MudGrid>
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-4">@_error</MudAlert>
+            }
+
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                       FullWidth="true" Size="Size.Large" Class="mt-6" Disabled="_busy">
+                Create account
+            </MudButton>
+        </EditForm>
+    </MudPaper>
+
+    <MudText Typo="Typo.caption" Class="mt-3 d-block">
+        Your details are used only to manage your clinic bookings, in line with POPIA.
+    </MudText>
+</MudContainer>
+
+@code {
+    private readonly RegisterPatientRequest _model = new();
+    private EditContext _editContext = null!;
+    private FluentValidator<RegisterPatientRequest>? _validator;
+    private bool _dobFromId;
+    private bool _showPassword;
+    private bool _busy;
+    private string? _error;
+
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private DateTime? DateOfBirth => _model.DateOfBirth?.ToDateTime(TimeOnly.MinValue);
+
+    protected override void OnInitialized() => _editContext = new EditContext(_model);
+
+    private void OnIdentityChanged()
+    {
+        // An SA ID number already contains the date of birth, so save the patient typing it twice.
+        var today = DateOnly.FromDateTime(Time.GetLocalNow().DateTime);
+        if (_model.IdentityType == IdentityDocumentType.SaIdNumber
+            && SaIdNumber.TryGetDateOfBirth(_model.IdentityNumber, today, out var dob))
+        {
+            _model.DateOfBirth = dob;
+            _dobFromId = true;
+            _editContext.NotifyFieldChanged(_editContext.Field(nameof(_model.DateOfBirth)));
+        }
+        else if (_dobFromId)
+        {
+            _model.DateOfBirth = null;
+            _dobFromId = false;
+        }
+    }
+
+    private void OnDateOfBirthPicked(DateTime? value)
+    {
+        // The picker also raises DateChanged when we set Date ourselves (from the ID number). Only a
+        // real change by the user should clear the "filled in from your ID" state.
+        var picked = value is { } date ? DateOnly.FromDateTime(date) : (DateOnly?)null;
+        if (picked == _model.DateOfBirth) return;
+
+        _model.DateOfBirth = picked;
+        _dobFromId = false;
+        _editContext.NotifyFieldChanged(_editContext.Field(nameof(_model.DateOfBirth)));
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+        var result = await Account.RegisterAsync(_model);
+        _busy = false;
+
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo(SafeReturnUrl.Resolve(ReturnUrl, "appointments"));
+            return;
+        }
+
+        _error = result.Error!.Message;
+        if (result.Error.HasFieldErrors)
+            _validator?.DisplayErrors(result.Error.FieldErrors);
+    }
+}

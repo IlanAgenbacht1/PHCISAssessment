@@ -1,0 +1,108 @@
+@page "/appointments/{Reference}"
+@attribute [Authorize(Roles = Roles.Patient)]
+@inject IBookingApi Api
+@inject IDialogService Dialogs
+@inject ISnackbar Snackbar
+
+<PageTitle>Appointment @Reference | PHCIS Booking</PageTitle>
+
+@if (_error is not null)
+{
+    <MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Appointment</MudText>
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_appointment is null)
+{
+    <MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Appointment</MudText>
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    @if (Confirmed && _appointment.Status == AppointmentStatus.Booked)
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Class="mb-4" Icon="@Icons.Material.Filled.CheckCircle">
+            You're booked. A confirmation will be sent to your phone.
+        </MudAlert>
+    }
+
+    <MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">@_appointment.Start.LongDate()</MudText>
+
+    <MudPaper Outlined="true" Class="pa-4">
+        <div class="d-flex justify-space-between align-center flex-wrap gap-2">
+            <MudText Typo="Typo.h5">@_appointment.Start.Time() to @_appointment.End.Time()</MudText>
+            <StatusChip Status="_appointment.Status" />
+        </div>
+        <MudText Class="mt-2"><strong>@_appointment.ClinicName</strong></MudText>
+        <MudText Typo="Typo.body2">@_appointment.ClinicAddress</MudText>
+        @if (_appointment.ReasonForVisit is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2">Reason: @_appointment.ReasonForVisit</MudText>
+        }
+        @if (_appointment.CancellationReason is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2" Color="Color.Secondary">@_appointment.CancellationReason</MudText>
+        }
+
+        <MudDivider Class="my-4" />
+        <MudText Typo="Typo.caption">Show this reference at reception</MudText>
+        <MudText Typo="Typo.h4" Style="font-family: monospace; letter-spacing: 0.1em">@_appointment.Reference</MudText>
+    </MudPaper>
+
+    <div class="d-flex flex-wrap gap-2 mt-4">
+        @if (_appointment.CanBeChanged)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       Href="@($"clinics/{_appointment.ClinicId}/book?reschedule={Uri.EscapeDataString(_appointment.Reference)}")">
+                Change time
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="CancelAsync" Disabled="_busy">
+                Cancel appointment
+            </MudButton>
+        }
+        <MudButton Href="appointments">All my appointments</MudButton>
+    </div>
+}
+
+@code {
+    private AppointmentDto? _appointment;
+    private string? _error;
+    private bool _busy;
+
+    [Parameter] public string Reference { get; set; } = "";
+
+    [SupplyParameterFromQuery] public bool Confirmed { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _appointment = null;
+        _error = null;
+        var result = await Api.GetAppointmentAsync(Reference);
+        if (result.Succeeded) _appointment = result.Value;
+        else _error = result.Error!.Message;
+    }
+
+    private async Task CancelAsync()
+    {
+        var dialog = await Dialogs.ShowAsync<CancelAppointmentDialog>(
+            "Cancel appointment",
+            new DialogParameters<CancelAppointmentDialog> { { d => d.Appointment, _appointment! } },
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var outcome = await dialog.Result;
+        if (outcome is null || outcome.Canceled || outcome.Data is not string reason) return;
+
+        _busy = true;
+        var result = await Api.CancelAsync(Reference, new CancelAppointmentRequest { Reason = reason });
+        _busy = false;
+
+        if (result.Succeeded)
+        {
+            _appointment = result.Value;
+            Snackbar.Add("Appointment cancelled. The slot has been released for someone else.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Error);
+        }
+    }
+}

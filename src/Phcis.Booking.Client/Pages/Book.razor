@@ -1,0 +1,208 @@
+@page "/clinics/{ClinicId:int}/book"
+@implements IDisposable
+@inject IBookingApi Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject TimeProvider Time
+
+<PageTitle>@(IsReschedule ? "Change appointment" : "Book") | PHCIS Booking</PageTitle>
+
+<MudText Typo="Typo.h4" HtmlTag="h1">@(IsReschedule ? "Choose a new time" : "Choose a time")</MudText>
+<MudText Typo="Typo.subtitle1" Color="Color.Secondary" Class="mb-4">@_clinic?.Name</MudText>
+
+@if (_pageError is not null)
+{
+    <MudAlert Severity="Severity.Error">@_pageError</MudAlert>
+    return;
+}
+
+@if (_rescheduling is not null)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        Moving your appointment on <strong>@_rescheduling.Start.DayAndTime()</strong> (@_rescheduling.Reference).
+        Your current time is kept until the new one is confirmed.
+    </MudAlert>
+}
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudText Typo="Typo.subtitle2" Class="mb-2">Day</MudText>
+    <div class="d-flex gap-2 overflow-x-auto pb-2" role="radiogroup" aria-label="Day">
+        @foreach (var day in _days)
+        {
+            var selected = day == _date;
+            <MudButton Size="Size.Small" Style="flex: 0 0 auto"
+                       Variant="@(selected ? Variant.Filled : Variant.Outlined)" Color="Color.Primary"
+                       role="radio" aria-checked="@(selected ? "true" : "false")"
+                       OnClick="() => SelectDayAsync(day)">
+                @DayLabel(day)
+            </MudButton>
+        }
+    </div>
+
+    <div class="mt-2" aria-live="polite">
+        @if (_loadingSlots)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        else if (_slotsError is not null)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true">@_slotsError</MudAlert>
+        }
+        else
+        {
+            <SlotPicker Slots="_slots" @bind-SelectedSlotId="_selectedSlotId" Disabled="_submitting" />
+        }
+    </div>
+</MudPaper>
+
+<AuthorizeView Roles="@Roles.Patient">
+    <Authorized>
+        @if (!IsReschedule)
+        {
+            <MudTextField @bind-Value="_reasonForVisit" Label="Reason for visit (optional)" MaxLength="250"
+                          HelperText="e.g. repeat medication, blood pressure check" Class="mt-4" />
+        }
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Class="mt-4"
+                   Disabled="@(_selectedSlotId is null || _submitting)" OnClick="ConfirmAsync">
+            @if (_submitting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(SelectedSlot is { } slot ? $"Confirm {slot.Start.DayAndTime()}" : "Pick a time")
+        </MudButton>
+    </Authorized>
+    <NotAuthorized>
+        @if (context.User.Identity?.IsAuthenticated == true)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4">Bookings are made from a patient account.</MudAlert>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Class="mt-4"
+                       Href="@($"login?returnUrl={Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri))}")">
+                Sign in to book
+            </MudButton>
+        }
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private const int DaysAhead = 14;
+
+    private ClinicDto? _clinic;
+    private AppointmentDto? _rescheduling;
+    private List<DateOnly> _days = [];
+    private DateOnly _date;
+    private List<TimeSlotDto> _slots = [];
+    private int? _selectedSlotId;
+    private string? _reasonForVisit;
+    private bool _loadingSlots;
+    private bool _submitting;
+    private string? _pageError;
+    private string? _slotsError;
+    private CancellationTokenSource? _slotsCts;
+
+    [Parameter] public int ClinicId { get; set; }
+
+    /// <summary>Booking reference of an existing appointment being moved.</summary>
+    [SupplyParameterFromQuery] public string? Reschedule { get; set; }
+
+    private bool IsReschedule => !string.IsNullOrEmpty(Reschedule);
+
+    private TimeSlotDto? SelectedSlot => _slots.FirstOrDefault(s => s.Id == _selectedSlotId);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Browser's date. For someone outside SA it can be a day off, which only means an empty first
+        // day: the API never returns past slots.
+        var today = DateOnly.FromDateTime(Time.GetLocalNow().DateTime);
+        _days = Enumerable.Range(0, DaysAhead).Select(today.AddDays).ToList();
+        _date = _days[0];
+
+        var clinics = await Api.GetClinicsAsync();
+        _clinic = clinics.Succeeded ? clinics.Value.FirstOrDefault(c => c.Id == ClinicId) : null;
+        if (_clinic is null)
+        {
+            _pageError = clinics.Error?.Message ?? "That clinic doesn't exist.";
+            return;
+        }
+
+        if (IsReschedule)
+        {
+            var existing = await Api.GetAppointmentAsync(Reschedule!);
+            if (!existing.Succeeded || !existing.Value.CanBeChanged)
+            {
+                _pageError = existing.Error?.Message ?? "That appointment can no longer be changed.";
+                return;
+            }
+            _rescheduling = existing.Value;
+        }
+
+        await LoadSlotsAsync();
+    }
+
+    private async Task SelectDayAsync(DateOnly day)
+    {
+        if (day == _date) return;
+        _date = day;
+        await LoadSlotsAsync();
+    }
+
+    private async Task LoadSlotsAsync()
+    {
+        // Tapping through days quickly would otherwise let a slow, older response overwrite a newer one.
+        _slotsCts?.Cancel();
+        _slotsCts?.Dispose();
+        _slotsCts = new CancellationTokenSource();
+        var token = _slotsCts.Token;
+
+        _loadingSlots = true;
+        _slotsError = null;
+        _selectedSlotId = null;
+
+        try
+        {
+            var result = await Api.GetAvailableSlotsAsync(ClinicId, _date, token);
+            if (result.Succeeded) _slots = result.Value;
+            else _slotsError = result.Error!.Message;
+            _loadingSlots = false;
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer request has taken over and will clear the loading state.
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (_selectedSlotId is not { } slotId) return;
+        _submitting = true;
+
+        var result = IsReschedule
+            ? await Api.RescheduleAsync(Reschedule!, new RescheduleAppointmentRequest { NewTimeSlotId = slotId })
+            : await Api.BookAsync(new BookAppointmentRequest { TimeSlotId = slotId, ReasonForVisit = _reasonForVisit });
+
+        _submitting = false;
+
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo($"appointments/{result.Value.Reference}?confirmed=true");
+            return;
+        }
+
+        Snackbar.Add(result.Error!.Message, result.Error.IsConflict ? Severity.Warning : Severity.Error);
+
+        // Someone else got the slot first. Show the up-to-date list instead of leaving a dead button.
+        if (result.Error.IsConflict)
+            await LoadSlotsAsync();
+    }
+
+    private string DayLabel(DateOnly day) =>
+        day == _days[0] ? "Today" : day == _days[0].AddDays(1) ? "Tomorrow" : day.Day();
+
+    public void Dispose()
+    {
+        _slotsCts?.Cancel();
+        _slotsCts?.Dispose();
+    }
+}

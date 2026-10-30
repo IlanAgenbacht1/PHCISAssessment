@@ -1,0 +1,41 @@
+@*
+    Shows a day's free slots as buttons, split into morning and afternoon.
+    Two-way bindable: <SlotPicker Slots="_slots" @bind-SelectedSlotId="_selectedId" />
+*@
+
+@if (Slots.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">@EmptyText</MudAlert>
+}
+else
+{
+    @foreach (var group in Slots.GroupBy(s => s.Start.Hour < 12 ? "Morning" : "Afternoon"))
+    {
+        <MudText Typo="Typo.subtitle2" Class="mt-3 mb-2">@group.Key</MudText>
+        <div class="slot-grid" role="radiogroup" aria-label="@($"{group.Key} times")">
+            @foreach (var slot in group)
+            {
+                var selected = slot.Id == SelectedSlotId;
+                <MudButton Variant="@(selected ? Variant.Filled : Variant.Outlined)"
+                           Color="Color.Primary"
+                           Disabled="Disabled"
+                           OnClick="() => SelectAsync(slot.Id)"
+                           role="radio"
+                           aria-checked="@(selected ? "true" : "false")"
+                           data-slot-id="@slot.Id">
+                    @slot.Start.Time()
+                </MudButton>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TimeSlotDto> Slots { get; set; } = [];
+    [Parameter] public int? SelectedSlotId { get; set; }
+    [Parameter] public EventCallback<int?> SelectedSlotIdChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string EmptyText { get; set; } = "No times left on this day. Try another day.";
+
+    private Task SelectAsync(int slotId) => SelectedSlotIdChanged.InvokeAsync(slotId);
+}

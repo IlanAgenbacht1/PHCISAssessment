@@ -29,7 +29,10 @@ internal static class AccountEndpoints
             .RequireRateLimiting(Policies.AuthRateLimit);
 
         group.MapPost("/logout", Logout).RequireAuthorization();
-        group.MapGet("/me", (ClaimsPrincipal user) => TypedResults.Ok(ToUserInfo(user))).RequireAuthorization();
+        // 204 rather than 401 when signed out: being anonymous is a normal answer to "who am I?",
+        // not an error, and it keeps a red 401 out of the browser console on every first visit.
+        group.MapGet("/me", Results<Ok<UserInfo>, NoContent> (ClaimsPrincipal user) =>
+            user.Identity?.IsAuthenticated == true ? TypedResults.Ok(ToUserInfo(user)) : TypedResults.NoContent());
     }
 
     private static async Task<Results<Ok<UserInfo>, ValidationProblem, ProblemHttpResult>> Register(

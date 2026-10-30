@@ -59,6 +59,14 @@ public class AccountTests(BookingApiFactory api)
     }
 
     [Fact]
+    public async Task Me_returns_no_content_when_signed_out()
+    {
+        var response = await api.CreateAnonymousClient().GetAsync($"/{ApiRoutes.Account}/me");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Wrong_password_is_rejected_without_saying_which_part_was_wrong()
     {
         var response = await api.CreateAnonymousClient().PostAsJsonAsync($"/{ApiRoutes.Account}/login",

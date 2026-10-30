@@ -1,0 +1,30 @@
+@* Asks for a cancellation reason and returns it. The page does the API call. *@
+
+<MudDialog>
+    <TitleContent>Cancel this appointment?</TitleContent>
+    <DialogContent>
+        <MudText Class="mb-3">@Appointment.Start.DayAndTime() at @Appointment.ClinicName</MudText>
+        <EditForm id="cancel-form" Model="_request" OnValidSubmit="Submit">
+            <FluentValidator TModel="CancelAppointmentRequest" />
+            <MudTextField @bind-Value="_request.Reason" For="() => _request.Reason"
+                          Label="Reason" Lines="2" Immediate="true"
+                          HelperText="Helps the clinic plan. e.g. feeling better, can't get transport" />
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => Dialog.Cancel()">Keep appointment</MudButton>
+        <MudButton ButtonType="ButtonType.Submit" form="cancel-form" Color="Color.Error" Variant="Variant.Filled">
+            Cancel appointment
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private readonly CancelAppointmentRequest _request = new();
+
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter, EditorRequired] public AppointmentDto Appointment { get; set; } = null!;
+
+    private void Submit() => Dialog.Close(DialogResult.Ok(_request.Reason));
+}

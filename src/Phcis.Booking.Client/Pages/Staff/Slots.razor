@@ -1,0 +1,115 @@
+@page "/staff/slots"
+@attribute [Authorize(Roles = Roles.Staff)]
+@inject IStaffApi Api
+@inject TimeProvider Time
+
+<PageTitle>Open up slots | PHCIS Booking</PageTitle>
+
+<MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Open up slots</MudText>
+<MudText Class="mb-4">
+    Creates bookable slots for your clinic. Times that already have a slot are skipped, so running this
+    again for the same days is safe.
+</MudText>
+
+<MudPaper Outlined="true" Class="pa-6" Style="max-width: 720px">
+    <EditForm Model="_model" OnValidSubmit="SubmitAsync">
+        <FluentValidator TModel="GenerateSlotsRequest" />
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Label="From" Date="ToDateTime(_model.From)" DateChanged="d => _model.From = ToDateOnly(d, _model.From)"
+                               MinDate="DateTime.Today" DateFormat="ddd d MMM yyyy" />
+                <ValidationMessage For="() => _model.From" class="mud-input-helper-text mud-input-error" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Label="To" Date="ToDateTime(_model.To)" DateChanged="d => _model.To = ToDateOnly(d, _model.To)"
+                               MinDate="DateTime.Today" DateFormat="ddd d MMM yyyy" />
+                <ValidationMessage For="() => _model.To" class="mud-input-helper-text mud-input-error" />
+            </MudItem>
+            <MudItem xs="6" sm="4">
+                <MudTimePicker Label="First slot" Time="_model.DayStart.ToTimeSpan()"
+                               TimeChanged="t => _model.DayStart = t is { } v ? TimeOnly.FromTimeSpan(v) : _model.DayStart" />
+            </MudItem>
+            <MudItem xs="6" sm="4">
+                <MudTimePicker Label="Day ends" Time="_model.DayEnd.ToTimeSpan()"
+                               TimeChanged="t => _model.DayEnd = t is { } v ? TimeOnly.FromTimeSpan(v) : _model.DayEnd" />
+                <ValidationMessage For="() => _model.DayEnd" class="mud-input-helper-text mud-input-error" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField @bind-Value="_model.SlotMinutes" For="() => _model.SlotMinutes" Label="Minutes per slot"
+                                 Min="5" Max="120" Step="5" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2">Days</MudText>
+                <div class="d-flex flex-wrap">
+                    @foreach (var day in Week)
+                    {
+                        <MudCheckBox T="bool" Value="_model.Days.Contains(day)" ValueChanged="on => ToggleDay(day, on)"
+                                     Label="@day.ToString()[..3]" Color="Color.Primary" />
+                    }
+                </div>
+                <ValidationMessage For="() => _model.Days" class="mud-input-helper-text mud-input-error" />
+            </MudItem>
+        </MudGrid>
+
+        @if (_result is not null)
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-4">
+                Created @_result.Created slot@(_result.Created == 1 ? "" : "s").
+                @if (_result.AlreadyExisted > 0)
+                {
+                    <span>@_result.AlreadyExisted already existed and were left alone.</span>
+                }
+            </MudAlert>
+        }
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+        }
+
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" Class="mt-6" Disabled="_busy">
+            Create slots
+        </MudButton>
+    </EditForm>
+</MudPaper>
+
+@code {
+    private static readonly DayOfWeek[] Week =
+    [
+        DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+        DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+    ];
+
+    private GenerateSlotsRequest _model = new();
+    private GenerateSlotsResult? _result;
+    private string? _error;
+    private bool _busy;
+
+    protected override void OnInitialized()
+    {
+        var today = DateOnly.FromDateTime(Time.GetLocalNow().DateTime);
+        _model = new GenerateSlotsRequest { From = today.AddDays(1), To = today.AddDays(14) };
+    }
+
+    private void ToggleDay(DayOfWeek day, bool on)
+    {
+        if (on && !_model.Days.Contains(day)) _model.Days.Add(day);
+        if (!on) _model.Days.Remove(day);
+    }
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+        _result = null;
+        var result = await Api.GenerateSlotsAsync(_model);
+        _busy = false;
+
+        if (result.Succeeded) _result = result.Value;
+        else _error = result.Error!.Message;
+    }
+
+    private static DateTime ToDateTime(DateOnly date) => date.ToDateTime(TimeOnly.MinValue);
+
+    private static DateOnly ToDateOnly(DateTime? value, DateOnly fallback) => value is { } v ? DateOnly.FromDateTime(v) : fallback;
+}

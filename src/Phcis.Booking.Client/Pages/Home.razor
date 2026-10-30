@@ -1,7 +1,55 @@
-﻿@page "/"
+@page "/"
+@inject IBookingApi Api
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Clinics | PHCIS Booking</PageTitle>
 
-<h1>Hello, world!</h1>
+<MudText Typo="Typo.h4" HtmlTag="h1" GutterBottom="true">Book a clinic visit</MudText>
+<MudText Class="mb-6">Choose your clinic to see open times. You'll get a reference number to show at reception.</MudText>
 
-Welcome to your new app.
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_clinics is null)
+{
+    <MudGrid>
+        @for (var i = 0; i < 3; i++)
+        {
+            <MudItem xs="12" sm="6" md="4"><MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="140px" /></MudItem>
+        }
+    </MudGrid>
+}
+else
+{
+    <MudGrid>
+        @foreach (var clinic in _clinics)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Outlined="true" Style="height: 100%">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" HtmlTag="h2">@clinic.Name</MudText>
+                        <MudText Typo="Typo.body2">@clinic.Address</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Tel @clinic.PhoneNumber</MudText>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Href="@($"clinics/{clinic.Id}/book")" Variant="Variant.Filled" Color="Color.Primary">
+                            See open times
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<ClinicDto>? _clinics;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetClinicsAsync();
+        if (result.Succeeded) _clinics = result.Value;
+        else _error = result.Error!.Message;
+    }
+}

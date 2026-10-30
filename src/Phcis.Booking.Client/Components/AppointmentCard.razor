@@ -1,0 +1,21 @@
+<MudCard Outlined="true" Class="mb-3">
+    <MudCardContent>
+        <div class="d-flex align-center justify-space-between flex-wrap gap-2">
+            <div>
+                <MudText Typo="Typo.h6">@Appointment.Start.DayAndTime()</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@Appointment.ClinicName</MudText>
+            </div>
+            <StatusChip Status="Appointment.Status" />
+        </div>
+        <MudText Typo="Typo.caption" Class="mt-2 d-block">Reference <strong>@Appointment.Reference</strong></MudText>
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Href="@($"appointments/{Appointment.Reference}")" Color="Color.Primary">
+            @(Appointment.CanBeChanged ? "View or change" : "View")
+        </MudButton>
+    </MudCardActions>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public AppointmentDto Appointment { get; set; } = null!;
+}
