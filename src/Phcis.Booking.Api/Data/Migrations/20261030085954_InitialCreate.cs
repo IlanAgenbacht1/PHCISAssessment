@@ -4,6 +4,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
+#pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
+
 namespace Phcis.Booking.Api.Data.Migrations
 {
     /// <inheritdoc />
@@ -260,6 +262,15 @@ namespace Phcis.Booking.Api.Data.Migrations
                         principalTable: "time_slots",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.InsertData(
+                table: "AspNetRoles",
+                columns: new[] { "id", "concurrency_stamp", "name", "normalized_name" },
+                values: new object[,]
+                {
+                    { "role-patient", "patient-v1", "Patient", "PATIENT" },
+                    { "role-staff", "staff-v1", "Staff", "STAFF" }
                 });
 
             migrationBuilder.CreateIndex(

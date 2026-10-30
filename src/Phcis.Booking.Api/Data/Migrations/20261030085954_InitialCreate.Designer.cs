@@ -12,7 +12,7 @@ using Phcis.Booking.Api.Data;
 namespace Phcis.Booking.Api.Data.Migrations
 {
     [DbContext(typeof(BookingDbContext))]
-    [Migration("20261030085707_InitialCreate")]
+    [Migration("20261030085954_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -54,6 +54,22 @@ namespace Phcis.Booking.Api.Data.Migrations
                         .HasDatabaseName("RoleNameIndex");
 
                     b.ToTable("AspNetRoles", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "role-patient",
+                            ConcurrencyStamp = "patient-v1",
+                            Name = "Patient",
+                            NormalizedName = "PATIENT"
+                        },
+                        new
+                        {
+                            Id = "role-staff",
+                            ConcurrencyStamp = "staff-v1",
+                            Name = "Staff",
+                            NormalizedName = "STAFF"
+                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

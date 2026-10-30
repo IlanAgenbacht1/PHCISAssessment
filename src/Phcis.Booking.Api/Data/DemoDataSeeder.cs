@@ -19,7 +19,6 @@ namespace Phcis.Booking.Api.Data;
 internal sealed class DemoDataSeeder(
     BookingDbContext db,
     UserManager<IdentityUser> users,
-    RoleManager<IdentityRole> roles,
     IClinicScheduleService schedule,
     TimeProvider time,
     ILogger<DemoDataSeeder> logger)
@@ -29,12 +28,6 @@ internal sealed class DemoDataSeeder(
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
-        foreach (var role in new[] { Roles.Patient, Roles.Staff })
-        {
-            if (!await roles.RoleExistsAsync(role))
-                await roles.CreateAsync(new IdentityRole(role));
-        }
-
         if (!await db.Clinics.AnyAsync(ct))
         {
             db.Clinics.AddRange(
