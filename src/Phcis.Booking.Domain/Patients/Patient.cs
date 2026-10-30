@@ -11,7 +11,7 @@ public class Patient
     private Patient() { }
 
     public Patient(
-        string userId,
+        string? userId,
         string firstName,
         string lastName,
         IdentityDocumentType identityType,
@@ -32,8 +32,11 @@ public class Patient
 
     public int Id { get; private set; }
 
-    /// <summary>Link to the ASP.NET Identity account. Kept as a plain id so the domain doesn't depend on Identity.</summary>
-    public string UserId { get; private set; } = null!;
+    /// <summary>
+    /// Link to the ASP.NET Identity account, kept as a plain id so the domain doesn't depend on Identity.
+    /// Null for patients registered at reception who never signed up online.
+    /// </summary>
+    public string? UserId { get; private set; }
 
     public string FirstName { get; private set; } = null!;
     public string LastName { get; private set; } = null!;
