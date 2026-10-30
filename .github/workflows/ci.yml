@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DOTNET_NOLOGO: true
+      PHCIS_TEST_DB: Host=localhost;Port=5432;Username=postgres;Password=postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore
+
+      # CI=true turns warnings into errors (Directory.Build.props).
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Check migrations match the model
+        run: |
+          dotnet tool restore
+          dotnet ef migrations has-pending-model-changes -p src/Phcis.Booking.Api --no-build -c Release
+
+      - name: Test
+        run: dotnet test --no-build -c Release --logger trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+
+  docker:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t phcis-booking:${{ github.sha }} .
