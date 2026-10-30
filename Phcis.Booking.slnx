@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Phcis.Booking.Api/Phcis.Booking.Api.csproj" />
+    <Project Path="src/Phcis.Booking.Client/Phcis.Booking.Client.csproj" />
+    <Project Path="src/Phcis.Booking.Domain/Phcis.Booking.Domain.csproj" />
+    <Project Path="src/Phcis.Booking.Shared/Phcis.Booking.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Phcis.Booking.IntegrationTests/Phcis.Booking.IntegrationTests.csproj" />
+    <Project Path="tests/Phcis.Booking.UnitTests/Phcis.Booking.UnitTests.csproj" />
+  </Folder>
+</Solution>
