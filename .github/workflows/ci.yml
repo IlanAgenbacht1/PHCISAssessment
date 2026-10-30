@@ -42,7 +42,7 @@ jobs:
       - name: Check migrations match the model
         run: |
           dotnet tool restore
-          dotnet ef migrations has-pending-model-changes -p src/Phcis.Booking.Api --no-build -c Release
+          dotnet ef migrations has-pending-model-changes -p src/Phcis.Booking.Api --no-build --configuration Release
 
       - name: Test
         run: dotnet test --no-build -c Release --logger trx --results-directory TestResults
